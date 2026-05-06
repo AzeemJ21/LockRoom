@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-background-primary text-text-primary antialiased;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Animated mesh gradient + particles (CSS-only) */
+.mesh-bg {
+  background-color: #0a0a0f;
+  background-image:
+    radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.22) 0px, transparent 55%),
+    radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.18) 0px, transparent 50%),
+    radial-gradient(at 0% 80%, rgba(99, 102, 241, 0.12) 0px, transparent 55%);
+  animation: mesh-shift 18s ease-in-out infinite alternate;
+}
+
+@keyframes mesh-shift {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(25deg);
+  }
+}
+
+.glass-panel {
+  @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_20px_80px_rgba(0,0,0,0.55)];
+}
