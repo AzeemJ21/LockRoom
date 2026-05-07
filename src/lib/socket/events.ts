@@ -4,6 +4,8 @@ export const SOCKET_EVENTS = {
   LEAVE_ROOM: 'room:leave',
   ROOM_JOINED: 'room:joined',
   ROOM_DESTROYED: 'room:destroyed',
+  /** Server pushed after Mongo + in-memory room code migration */
+  ROOM_CODE_CHANGED: 'room:code_changed',
   USER_JOINED: 'room:user_joined',
   USER_LEFT: 'room:user_left',
   ERROR: 'room:error',

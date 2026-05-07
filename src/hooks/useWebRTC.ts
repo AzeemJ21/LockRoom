@@ -10,13 +10,12 @@ import type { CallType as CT } from '@/lib/types/webrtc.types';
 export type CallType = CT;
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connected' | 'ended';
 
-function buildIceServers(): RTCIceServer[] {
+function buildIceServersFromEnv(): RTCIceServer[] {
   const stunList =
     process.env.NEXT_PUBLIC_STUN_SERVERS?.split(',').map((s) => s.trim()).filter(Boolean) ??
     ['stun:stun.l.google.com:19302'];
   const servers: RTCIceServer[] = stunList.map((urls) => ({ urls }));
 
-  // Long-lived TURN username/secret must not ship to browsers in production — swap for minted tokens server-side.
   if (process.env.NEXT_PUBLIC_TURN_URLS) {
     const urls = process.env.NEXT_PUBLIC_TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean);
     if (urls.length) {
@@ -31,10 +30,25 @@ function buildIceServers(): RTCIceServer[] {
   return servers;
 }
 
+async function fetchIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const res = await fetch('/api/rtc/ice-config', { cache: 'no-store' });
+    if (!res.ok) return buildIceServersFromEnv();
+    const data = (await res.json()) as { iceServers?: RTCIceServer[] };
+    if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+      return data.iceServers;
+    }
+  } catch {
+    /* same-origin / offline */
+  }
+  return buildIceServersFromEnv();
+}
+
 export function useWebRTC(socket: Socket | null, userId: string) {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingRemoteSocketId = useRef<string | null>(null);
+  const iceQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const [localStreamVersion, setLocalStreamVersion] = useState(0);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
@@ -48,12 +62,27 @@ export function useWebRTC(socket: Socket | null, userId: string) {
     offer: RTCSessionDescriptionInit;
   } | null>(null);
 
+  const flushIceQueue = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc?.remoteDescription) return;
+    const pending = iceQueueRef.current;
+    iceQueueRef.current = [];
+    for (const c of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch {
+        /* ignore stale candidates */
+      }
+    }
+  }, []);
+
   const endCall = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
     pendingRemoteSocketId.current = null;
+    iceQueueRef.current = [];
     setRemoteStream(null);
     setCallStatus('idle');
     setIncomingCall(null);
@@ -61,8 +90,8 @@ export function useWebRTC(socket: Socket | null, userId: string) {
   }, []);
 
   const createPeerConnectionFor = useCallback(
-    (targetSocketId: string) => {
-      const pc = createPeerConnection(buildIceServers());
+    (targetSocketId: string, iceServers: RTCIceServer[]) => {
+      const pc = createPeerConnection(iceServers);
       pendingRemoteSocketId.current = targetSocketId;
 
       pc.onicecandidate = ({ candidate }) => {
@@ -72,11 +101,12 @@ export function useWebRTC(socket: Socket | null, userId: string) {
       };
 
       pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0]);
+        const stream = event.streams[0];
+        if (stream) setRemoteStream(stream);
       };
 
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        if (pc.connectionState === 'failed') {
           endCall();
         }
       };
@@ -90,6 +120,7 @@ export function useWebRTC(socket: Socket | null, userId: string) {
   const startCall = useCallback(
     async (targetSocketId: string, type: CallType) => {
       if (!socket) return;
+      const iceServers = await fetchIceServers();
       setCallType(type);
       setCallStatus('calling');
 
@@ -102,7 +133,8 @@ export function useWebRTC(socket: Socket | null, userId: string) {
 
       localStreamRef.current = stream;
       setLocalStreamVersion((v) => v + 1);
-      const pc = createPeerConnectionFor(targetSocketId);
+      iceQueueRef.current = [];
+      const pc = createPeerConnectionFor(targetSocketId, iceServers);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       const offer = await pc.createOffer();
@@ -121,27 +153,32 @@ export function useWebRTC(socket: Socket | null, userId: string) {
   const answerCall = useCallback(
     async (callerSocketId: string, offer: RTCSessionDescriptionInit, type: CallType) => {
       if (!socket) return;
+      const iceServers = await fetchIceServers();
       setCallStatus('connected');
       setCallType(type);
 
+      /** Remote shares screen — answer with camera+mic so they see/hear you (do not prompt for screen capture). */
       const stream =
         type === 'screen'
-          ? await getDisplayMediaStream()
+          ? await getUserMediaStream(true, true)
           : await getUserMediaStream(true, type === 'video');
 
       localStreamRef.current = stream;
       setLocalStreamVersion((v) => v + 1);
-      const pc = createPeerConnectionFor(callerSocketId);
+      iceQueueRef.current = [];
+      const pc = createPeerConnectionFor(callerSocketId, iceServers);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushIceQueue();
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
       socket.emit(SOCKET_EVENTS.CALL_ANSWER, { targetSocketId: callerSocketId, answer });
       setIncomingCall(null);
     },
-    [socket, createPeerConnectionFor]
+    [socket, createPeerConnectionFor, flushIceQueue]
   );
 
   const toggleMute = useCallback(() => {
@@ -186,13 +223,32 @@ export function useWebRTC(socket: Socket | null, userId: string) {
       answererSocketId: string;
     }) => {
       if (answererSocketId !== pendingRemoteSocketId.current) return;
-      await peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(answer));
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      await flushIceQueue();
       setCallStatus('connected');
     };
 
-    const onIce = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      if (!candidate) return;
-      await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+    const onIce = async ({
+      candidate,
+      fromSocketId,
+    }: {
+      candidate: RTCIceCandidateInit;
+      fromSocketId: string;
+    }) => {
+      if (!candidate || fromSocketId !== pendingRemoteSocketId.current) return;
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
+      if (!pc.remoteDescription) {
+        iceQueueRef.current.push(candidate);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        iceQueueRef.current.push(candidate);
+      }
     };
 
     const onEnded = () => endCall();
@@ -208,7 +264,7 @@ export function useWebRTC(socket: Socket | null, userId: string) {
       socket.off(SOCKET_EVENTS.ICE_CANDIDATE_RECEIVED, onIce);
       socket.off(SOCKET_EVENTS.CALL_ENDED, onEnded);
     };
-  }, [socket, endCall]);
+  }, [socket, endCall, flushIceQueue]);
 
   return {
     localStream: localStreamRef.current,

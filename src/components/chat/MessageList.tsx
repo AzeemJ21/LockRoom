@@ -6,13 +6,21 @@ import type { Message } from '@/lib/types/message.types';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { EmptyState } from '@/components/chat/EmptyState';
 
-export function MessageList({ messages, userId }: { messages: Message[]; userId: string }) {
+export function MessageList({
+  messages,
+  userId,
+  onReply,
+}: {
+  messages: Message[];
+  userId: string;
+  onReply?: (m: Message) => void;
+}) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 84,
+    estimateSize: () => 96,
     overscan: 12,
   });
 
@@ -46,7 +54,7 @@ export function MessageList({ messages, userId }: { messages: Message[]; userId:
               className="absolute left-0 right-0 pb-3"
               style={{ transform: `translateY(${vi.start}px)` }}
             >
-              <MessageBubble message={m} self={self} />
+              <MessageBubble message={m} self={self} onReply={onReply} />
             </div>
           );
         })}

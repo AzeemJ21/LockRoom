@@ -29,34 +29,38 @@ export function IncomingCallModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm"
+                className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm"
               />
             </Dialog.Overlay>
-            <Dialog.Content forceMount asChild>
-              <motion.div
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                className="fixed left-1/2 top-1/2 z-[96] w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-background-secondary p-6 shadow-2xl"
-              >
-                <Dialog.Title className="text-lg font-semibold text-text-primary">Incoming call</Dialog.Title>
-                <div className="mt-2 text-sm text-text-secondary">
-                  <span className="font-mono text-text-primary">{callerId}</span>
-                  <span className="mx-2 text-text-muted">·</span>
-                  <span className="uppercase">{callType}</span>
-                </div>
+            <Dialog.Content
+              forceMount
+              onOpenAutoFocus={(e) => e.preventDefault()}
+              className="fixed left-1/2 z-[101] w-[min(100vw-2rem,28rem)] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-2xl border border-white/10 bg-background-secondary p-5 shadow-2xl focus:outline-none
+                bottom-[max(1.25rem,env(safe-area-inset-bottom,0px))] top-auto max-h-[min(55dvh,28rem)] overflow-y-auto
+                sm:bottom-auto sm:top-1/2 sm:max-h-[min(85vh,32rem)] sm:-translate-y-1/2"
+            >
+              <Dialog.Title className="text-lg font-semibold text-text-primary">Incoming call</Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm text-text-secondary">
+                <span className="font-mono text-text-primary">{callerId}</span>
+                <span className="mx-2 text-text-muted">·</span>
+                <span className="uppercase">{callType}</span>
+              </Dialog.Description>
 
-                <div className="mt-6 flex gap-3">
-                  <Button type="button" className="flex-1" onClick={onAccept}>
-                    <Phone className="mr-2 h-4 w-4" />
-                    Accept
-                  </Button>
-                  <Button type="button" variant="danger" className="flex-1" onClick={onDecline}>
-                    <PhoneOff className="mr-2 h-4 w-4" />
-                    Decline
-                  </Button>
-                </div>
-              </motion.div>
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:gap-3">
+                <Button type="button" className="min-h-[48px] w-full sm:flex-1" onClick={onAccept}>
+                  <Phone className="mr-2 h-4 w-4" />
+                  Accept
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="min-h-[48px] w-full sm:flex-1"
+                  onClick={onDecline}
+                >
+                  <PhoneOff className="mr-2 h-4 w-4" />
+                  Decline
+                </Button>
+              </div>
             </Dialog.Content>
           </Dialog.Portal>
         )}

@@ -7,7 +7,7 @@ import { Room } from '@/lib/db/models/Room';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function generateRoomCode(length = 8): string {
+function generateRoomCode(length = 10): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = randomBytes(length);
   let out = '';
@@ -18,8 +18,18 @@ function generateRoomCode(length = 8): string {
 }
 
 /** POST creates metadata-only room rows — never stores conversation content. */
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    let requestedCode: string | undefined;
+    try {
+      const body = (await req.json()) as { code?: unknown };
+      if (typeof body?.code === 'string') {
+        requestedCode = body.code.toUpperCase().trim();
+      }
+    } catch {
+      /* empty body */
+    }
+
     try {
       await connectMongo();
     } catch (err) {
@@ -41,9 +51,41 @@ export async function POST() {
       );
     }
 
+    if (requestedCode) {
+      if (!/^[A-Z0-9]{6,10}$/.test(requestedCode)) {
+        return NextResponse.json(
+          { error: 'Custom codes must be 6–10 letters or digits' },
+          { status: 400 }
+        );
+      }
+      const taken = await Room.findOne({ code: requestedCode }).lean();
+      if (taken) {
+        return NextResponse.json({ error: 'That room code is already taken' }, { status: 409 });
+      }
+      try {
+        await Room.create({
+          code: requestedCode,
+          lastActivity: new Date(),
+          participantCount: 0,
+          isActive: true,
+        });
+        return NextResponse.json({ code: requestedCode });
+      } catch (err) {
+        const detail =
+          process.env.NODE_ENV === 'development' && err instanceof Error ? err.message : undefined;
+        return NextResponse.json(
+          {
+            error: 'Could not create room with that code',
+            ...(detail ? { detail } : {}),
+          },
+          { status: 500 }
+        );
+      }
+    }
+
     let lastCreateError: unknown;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = generateRoomCode(8);
+      const code = generateRoomCode(10);
       try {
         await Room.create({
           code,

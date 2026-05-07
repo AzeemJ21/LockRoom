@@ -8,6 +8,18 @@ export interface EncryptedPayload {
 /** Per-recipient envelopes for pairwise AES keys in group rooms. */
 export type MessageEnvelopes = Record<string, EncryptedPayload>;
 
+export interface ChatReplyRef {
+  id: string;
+  preview: string;
+}
+
+export interface MediaDescriptor {
+  kind: 'image' | 'video' | 'audio' | 'file';
+  fileId: string;
+  name: string;
+  mime: string;
+}
+
 export interface Message {
   id: string;
   type: MessageType;
@@ -19,6 +31,9 @@ export interface Message {
   /** Preferred transport for group chats — each recipient decrypts their slot. */
   envelopes?: MessageEnvelopes;
   decryptedContent?: string;
+  /** Parsed from encrypted JSON payloads (text/media). */
+  replyTo?: ChatReplyRef;
+  media?: MediaDescriptor;
   mediaType?: string;
   mediaSize?: number;
   mediaDuration?: number;

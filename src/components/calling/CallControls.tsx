@@ -26,7 +26,7 @@ export function CallControls({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background-secondary/90 px-3 py-2 shadow-2xl backdrop-blur"
+      className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-background-secondary/90 px-3 py-2 shadow-2xl backdrop-blur sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
     >
       <Button type="button" variant="ghost" className="rounded-full px-3" onClick={onToggleMute}>
         {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}

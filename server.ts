@@ -31,8 +31,10 @@ async function main() {
 
   const expressApp = express();
   expressApp.set('trust proxy', 1);
-  expressApp.use(express.json({ limit: '2mb' }));
-
+  /**
+   * Do not use `express.json()` globally before Next's handler — it consumes the body stream so
+   * Route Handlers like POST `/api/upload` see an empty body or fail unpredictably.
+   */
   expressApp.use('/api/rooms', joinRoomLimiter);
 
   // Express 5 / path-to-regexp v8: avoid `*` patterns — delegate everything else to Next.js.

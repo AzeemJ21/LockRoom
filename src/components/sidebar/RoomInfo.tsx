@@ -6,6 +6,7 @@ import { Copy, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
+import { RenameRoomButton } from '@/components/sidebar/RenameRoomButton';
 
 export function RoomInfo({ roomCode }: { roomCode: string }) {
   const { push } = useToast();
@@ -28,11 +29,12 @@ export function RoomInfo({ roomCode }: { roomCode: string }) {
         <Badge>Encrypted</Badge>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <RenameRoomButton roomCode={roomCode} className="flex-1 min-w-[7rem]" />
         <Button
           type="button"
           variant="ghost"
-          className="flex-1"
+          className="flex-1 min-w-[7rem]"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(roomCode);

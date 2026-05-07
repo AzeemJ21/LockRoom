@@ -30,7 +30,25 @@ export function LandingPage() {
   const createRoom = async () => {
     setCreating(true);
     try {
-      const res = await fetch('/api/rooms', { method: 'POST' });
+      const normalized = normalizeRoomCode(code);
+      const hasInput = normalized.length > 0;
+      if (hasInput && !isValidRoomCode(normalized)) {
+        push('Use 6–10 letters or numbers for your code, or leave the box empty for a random room.', 'error');
+        return;
+      }
+      const useCustom = hasInput && isValidRoomCode(normalized);
+      let res = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: useCustom ? { 'Content-Type': 'application/json' } : undefined,
+        body: useCustom ? JSON.stringify({ code: normalized }) : undefined,
+      });
+
+      /** Chosen code already reserved in Mongo — create a random room instead. */
+      if (res.status === 409 && useCustom) {
+        push('That code is already taken. Creating a random room instead…', 'info');
+        res = await fetch('/api/rooms', { method: 'POST' });
+      }
+
       const raw = await res.text();
       if (!res.ok) {
         let parsed: Record<string, unknown> | null = null;
@@ -97,12 +115,15 @@ export function LandingPage() {
 
           <div className="mt-8 space-y-4">
             <RoomCodeInput value={code} onValueChange={setCode} />
+            <p className="text-xs text-text-muted">
+              Type a code (6–10 characters) and tap Create to reserve it, or leave empty for a random code. If your code is already taken, we’ll create a random room for you.
+            </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button className="flex-1" disabled={!canEnter} onClick={enterRoom}>
                 Enter Room
               </Button>
               <Button variant="ghost" className="flex-1" disabled={creating} onClick={createRoom}>
-                {creating ? 'Creating…' : 'Create Room'}
+                {creating ? 'Creating…' : code.trim().length > 0 ? 'Create with this code' : 'Create Room'}
               </Button>
             </div>
           </div>

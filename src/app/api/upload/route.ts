@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { isAllowedMime } from '@/lib/utils/fileUtils';
 import { MAX_FILE_SIZE_BYTES } from '@/lib/utils/constants';
-import { getRedis } from '@/lib/redis/client';
+import { saveBlob } from '@/lib/server/fileBlobStore';
 
 const BodySchema = z.object({
   name: z.string().max(240),
@@ -12,13 +12,7 @@ const BodySchema = z.object({
   data: z.string(),
 });
 
-type UploadPayload = z.infer<typeof BodySchema>;
-
-const memoryStore = () => {
-  const g = globalThis as unknown as { __cipherUploadStore?: Map<string, UploadPayload> };
-  if (!g.__cipherUploadStore) g.__cipherUploadStore = new Map();
-  return g.__cipherUploadStore;
-};
+const UPLOAD_TTL_SEC = 3600;
 
 /** Stores ciphertext-only blobs temporarily — plaintext never touches MongoDB. */
 export async function POST(req: Request) {
@@ -45,13 +39,16 @@ export async function POST(req: Request) {
   }
 
   const fileId = uuidv4();
-  const redis = await getRedis();
-
-  if (redis) {
-    await redis.set(`file:${fileId}`, parsed.data.data, { EX: 3600 });
-  } else {
-    memoryStore().set(fileId, parsed.data);
-  }
+  await saveBlob(
+    fileId,
+    {
+      iv: parsed.data.iv,
+      data: parsed.data.data,
+      mime: parsed.data.mime,
+      name: parsed.data.name,
+    },
+    UPLOAD_TTL_SEC
+  );
 
   return NextResponse.json({ fileId });
 }

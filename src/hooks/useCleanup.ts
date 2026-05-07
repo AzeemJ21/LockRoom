@@ -8,6 +8,9 @@ import { keyStore } from '@/lib/crypto/keyStore';
 export function useCleanup(socket: Socket | null, router: { push: (href: string) => void }) {
   const wipeAndExit = useCallback(() => {
     keyStore.wipe();
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('cipher_uid');
+    }
 
     if (socket?.connected) {
       socket.emit(SOCKET_EVENTS.LEAVE_ROOM);

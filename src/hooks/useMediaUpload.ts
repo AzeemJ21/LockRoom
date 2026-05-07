@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { encryptFile } from '@/lib/crypto/encryption';
-import { isAllowedMime } from '@/lib/utils/fileUtils';
+import { isAllowedMime, resolveMimeForFile, sniffMimeFromMagic } from '@/lib/utils/fileUtils';
 import { MAX_FILE_SIZE_BYTES } from '@/lib/utils/constants';
 
 interface UploadResult {
@@ -28,7 +28,12 @@ export function useMediaUpload(sharedKey: CryptoKey | null) {
       if (file.size > MAX_FILE_SIZE_BYTES) {
         throw new Error('File exceeds maximum size');
       }
-      if (!isAllowedMime(file.type)) {
+      let mime = resolveMimeForFile(file);
+      if (!mime || !isAllowedMime(mime)) {
+        const sniffed = sniffMimeFromMagic(await file.slice(0, 24).arrayBuffer());
+        if (sniffed && isAllowedMime(sniffed)) mime = sniffed;
+      }
+      if (!mime || !isAllowedMime(mime)) {
         throw new Error('File type not allowed');
       }
 
@@ -38,7 +43,7 @@ export function useMediaUpload(sharedKey: CryptoKey | null) {
         const { ciphertext, iv } = await encryptFile(buf, sharedKey);
         const body = {
           name: file.name,
-          mime: file.type,
+          mime,
           iv,
           data: toBase64(ciphertext),
         };
