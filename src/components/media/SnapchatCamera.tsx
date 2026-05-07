@@ -7,8 +7,17 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils/cn';
 
 const LONG_PRESS_MS = 380;
-const MAX_RECORD_MS = 120_000;
+
+/** Max clip length sent through chat (sync with product expectation). */
+export const MAX_CAMERA_VIDEO_MS = 30_000;
 const RECORD_SLICE_MS = 120;
+
+function formatRecordingClock(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 function pickVideoMimeType(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
@@ -57,6 +66,7 @@ export function SnapchatCamera({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [recording, setRecording] = useState(false);
   const [hasVideoDevice, setHasVideoDevice] = useState(true);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -71,8 +81,8 @@ export function SnapchatCamera({
         audio: true,
         video: {
           facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
       });
       streamRef.current = stream;
@@ -107,6 +117,7 @@ export function SnapchatCamera({
       stopStream();
       setRecording(false);
       recordingRef.current = false;
+      setElapsedMs(0);
       return;
     }
     void attachStream();
@@ -114,6 +125,20 @@ export function SnapchatCamera({
       stopStream();
     };
   }, [open, attachStream, stopStream]);
+
+  /** Recording clock + progress (smooth bar). */
+  useEffect(() => {
+    if (!recording) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    setElapsedMs(0);
+    const tick = () => setElapsedMs(Date.now() - start);
+    tick();
+    const id = window.setInterval(tick, 120);
+    return () => window.clearInterval(id);
+  }, [recording]);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -181,7 +206,7 @@ export function SnapchatCamera({
 
       maxRecordTimerRef.current = setTimeout(() => {
         stopVideoRecording();
-      }, MAX_RECORD_MS);
+      }, MAX_CAMERA_VIDEO_MS);
     } catch {
       onError?.('Could not start recording.');
     }
@@ -264,6 +289,9 @@ export function SnapchatCamera({
     setFacingMode((m) => (m === 'environment' ? 'user' : 'environment'));
   };
 
+  const progress = Math.min(elapsedMs / MAX_CAMERA_VIDEO_MS, 1);
+  const maxClock = formatRecordingClock(MAX_CAMERA_VIDEO_MS);
+
   return (
     <AnimatePresence>
       {open ? (
@@ -271,73 +299,102 @@ export function SnapchatCamera({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[220] flex flex-col bg-black"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[220] flex min-h-[100dvh] min-w-0 flex-col bg-black overscroll-none"
+          style={{
+            touchAction: 'none',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            paddingTop: 'env(safe-area-inset-top)',
+          }}
         >
           <video
             ref={videoRef}
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 z-0 h-full min-h-0 w-full object-cover"
             playsInline
             muted
             autoPlay
           />
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent pt-[env(safe-area-inset-top)] pb-10">
-            <div className="pointer-events-auto flex items-center justify-between px-3 pt-2">
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-12 w-12 shrink-0 rounded-full border border-white/20 bg-black/30 px-0 text-white backdrop-blur"
-                aria-label="Close camera"
-                onClick={() => {
-                  clearLongPressTimer();
-                  if (recordingRef.current) stopVideoRecording();
-                  onClose();
-                }}
-              >
-                <X className="h-6 w-6" />
-              </Button>
-              <span className="max-w-[min(46vw,160px)] truncate text-center text-[10px] font-medium text-white/85 sm:max-w-none sm:text-xs">
-                Hold for video · Tap photo
+          {/* Top chrome */}
+          <header className="relative z-10 grid w-full shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 px-2 pt-1 sm:px-4 sm:pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 min-h-[44px] min-w-[44px] shrink-0 rounded-full border border-white/20 bg-black/35 px-0 text-white shadow-lg backdrop-blur-md sm:h-12 sm:w-12"
+              aria-label="Close camera"
+              onClick={() => {
+                clearLongPressTimer();
+                if (recordingRef.current) stopVideoRecording();
+                onClose();
+              }}
+            >
+              <X className="h-6 w-6" />
+            </Button>
+
+            <div className="flex min-w-0 flex-col items-center justify-center gap-0.5 px-1 pt-1 text-center">
+              <span className="text-[11px] font-medium leading-tight text-white/95 sm:text-xs">
+                Tap photo · Hold video
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-12 w-12 shrink-0 rounded-full border border-white/20 bg-black/30 px-0 text-white backdrop-blur"
-                aria-label="Flip camera"
-                disabled={!hasVideoDevice || recording}
-                onClick={() => flipCamera()}
-              >
-                <RefreshCw className="h-5 w-5" />
-              </Button>
+              <span className="text-[10px] text-white/55 sm:text-[11px]">Max {maxClock} clip</span>
             </div>
-          </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 min-h-[44px] min-w-[44px] shrink-0 justify-self-end rounded-full border border-white/20 bg-black/35 px-0 text-white shadow-lg backdrop-blur-md sm:h-12 sm:w-12"
+              aria-label="Flip camera"
+              disabled={!hasVideoDevice || recording}
+              onClick={() => flipCamera()}
+            >
+              <RefreshCw className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
+            </Button>
+          </header>
 
           {!hasVideoDevice ? (
-            <div className="relative z-[5] mt-auto flex flex-1 items-center justify-center px-6 text-center text-sm text-white/80">
-              Allow camera access to take photos and videos.
+            <div className="relative z-[5] mt-auto flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+              <p className="max-w-sm text-sm leading-relaxed text-white/85">
+                Allow camera access in your browser settings to take photos and record video.
+              </p>
             </div>
           ) : null}
 
-          <div className="relative z-10 mt-auto flex flex-col items-center gap-4 pb-8 pt-6">
-            {recording ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="rounded-full bg-red-600/90 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-white shadow-lg"
-              >
-                Recording…
-              </motion.div>
-            ) : (
-              <div className="h-8" aria-hidden />
-            )}
+          {/* Bottom dock */}
+          <div className="relative z-10 mt-auto flex w-full shrink-0 flex-col items-center gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:gap-4 sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pt-6">
+            <div className="flex w-full max-w-md flex-col items-center gap-2">
+              {recording ? (
+                <div className="flex w-full flex-col items-center gap-2">
+                  <div className="flex items-baseline gap-2 tabular-nums">
+                    <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+                      {formatRecordingClock(elapsedMs)}
+                    </span>
+                    <span className="text-sm text-white/45">/ {maxClock}</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-red-500 to-orange-400 transition-[width] duration-150 ease-linear"
+                      style={{ width: `${progress * 100}%` }}
+                    />
+                  </div>
+                  <motion.span
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-[11px] font-semibold uppercase tracking-[0.2em] text-red-300"
+                  >
+                    Recording
+                  </motion.span>
+                </div>
+              ) : (
+                <div className="h-[52px] sm:h-14" aria-hidden />
+              )}
+            </div>
 
             <button
               type="button"
               disabled={disabled || !hasVideoDevice}
               className={cn(
-                'relative flex h-[76px] w-[76px] touch-none items-center justify-center rounded-full border-4 border-white bg-white/10 outline-none transition-transform active:scale-95 disabled:opacity-40',
-                recording && 'border-red-400 bg-red-500/40'
+                'relative flex shrink-0 touch-none items-center justify-center rounded-full border-[5px] border-white bg-white/15 outline-none ring-offset-2 ring-offset-black transition-transform active:scale-[0.96] disabled:pointer-events-none disabled:opacity-40 sm:border-[6px]',
+                'h-[clamp(4.75rem,21vmin,5.75rem)] w-[clamp(4.75rem,21vmin,5.75rem)]',
+                recording && 'border-red-400 bg-red-500/35 shadow-[0_0_24px_rgba(248,113,113,0.45)]'
               )}
               aria-label={recording ? 'Release to finish recording' : 'Tap for photo, hold for video'}
               style={{ touchAction: 'none' }}
@@ -347,12 +404,15 @@ export function SnapchatCamera({
               onPointerLeave={onShutterPointerCancel}
             >
               <motion.span
-                className="h-[56px] w-[56px] rounded-full bg-white"
+                className={cn(
+                  'rounded-full bg-white shadow-inner',
+                  'h-[clamp(3.35rem,15vmin,4.15rem)] w-[clamp(3.35rem,15vmin,4.15rem)]'
+                )}
                 animate={{
-                  scale: recording ? [1, 0.92, 1] : 1,
+                  scale: recording ? [1, 0.93, 1] : 1,
                 }}
                 transition={
-                  recording ? { repeat: Infinity, duration: 0.9 } : { duration: 0.2 }
+                  recording ? { repeat: Infinity, duration: 0.85, ease: 'easeInOut' } : { duration: 0.2 }
                 }
               />
             </button>

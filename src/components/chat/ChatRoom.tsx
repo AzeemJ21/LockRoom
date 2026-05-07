@@ -195,6 +195,25 @@ export function ChatRoom({ roomCode }: { roomCode: string }) {
     };
   }, [socket, router]);
 
+  /** Join denied (invalid code, full room, rate limit, etc.) — server emits consistent UX message. */
+  useEffect(() => {
+    if (!socket) return;
+
+    const onRoomError = (payload: { message?: string }) => {
+      const msg =
+        typeof payload?.message === 'string' && payload.message.trim()
+          ? payload.message.trim()
+          : 'Could not join this room.';
+      push(msg, 'error');
+      router.replace('/');
+    };
+
+    socket.on(SOCKET_EVENTS.ERROR, onRoomError);
+    return () => {
+      socket.off(SOCKET_EVENTS.ERROR, onRoomError);
+    };
+  }, [socket, push, router]);
+
   void cryptoEpoch;
   const encryptionReady = (() => {
     const peers = participants.filter((p) => p.userId !== userId);

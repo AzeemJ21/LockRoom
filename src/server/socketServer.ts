@@ -67,7 +67,7 @@ function recordJoinAttempt(ip: string): boolean {
   return true;
 }
 
-function detachSocketFromRoom(socket: Socket, io: Server) {
+function detachSocketFromRoom(socket: Socket, _io: Server) {
   const data = sd(socket);
   const code = data.roomCode;
   if (!code) return;
@@ -175,7 +175,7 @@ export function setupSocketHandlers(io: Server) {
 
         const roomBefore = rooms.get(code);
         if (roomBefore && roomBefore.participants.size >= MAX_PARTICIPANTS) {
-          socket.emit(SOCKET_EVENTS.ERROR, { message: 'Room is full' });
+          socket.emit(SOCKET_EVENTS.ERROR, { message: 'Wrong room code' });
           return;
         }
 

@@ -196,7 +196,9 @@ export function MessageInput({
         </Button>
       </div>
       <div className={cn('mx-auto mt-2 max-w-4xl text-[11px] text-text-muted')}>
-        <span className="lg:hidden">Swipe to reply · Camera: tap photo, hold video</span>
+        <span className="lg:hidden">
+          Swipe to reply · Camera: tap photo, hold video (max 30s)
+        </span>
         <span className="hidden lg:inline">
           Swipe right on a message to reply · Shift+Enter for newline
         </span>
