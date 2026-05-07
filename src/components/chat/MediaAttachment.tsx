@@ -1,11 +1,26 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { decryptFile } from '@/lib/crypto/encryption';
 import { keyStore } from '@/lib/crypto/keyStore';
 import type { MediaDescriptor } from '@/lib/types/message.types';
 import { AudioPlayer } from '@/components/media/AudioPlayer';
 import { VideoPlayer } from '@/components/media/VideoPlayer';
+
+/** Blocks right-click / long-press “open image” / save flows on decrypted blob URLs (best-effort; not DRM). */
+function SecureMediaFrame({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      style={{ WebkitTouchCallout: 'none' }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function MediaAttachment({ senderId, media }: { senderId: string; media: MediaDescriptor }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -53,15 +68,31 @@ export function MediaAttachment({ senderId, media }: { senderId: string; media: 
 
   if (media.kind === 'image') {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- blob URL from decrypted bytes
-      <img src={objectUrl} alt="" className="max-h-72 max-w-full rounded-xl object-contain" />
+      <SecureMediaFrame>
+        {/* eslint-disable-next-line @next/next/no-img-element -- blob URL from decrypted bytes */}
+        <img
+          src={objectUrl}
+          alt=""
+          draggable={false}
+          className="max-h-72 max-w-full rounded-xl object-contain"
+          onContextMenu={(e) => e.preventDefault()}
+        />
+      </SecureMediaFrame>
     );
   }
   if (media.kind === 'video') {
-    return <VideoPlayer src={objectUrl} />;
+    return (
+      <SecureMediaFrame>
+        <VideoPlayer src={objectUrl} secure />
+      </SecureMediaFrame>
+    );
   }
   if (media.kind === 'audio') {
-    return <AudioPlayer src={objectUrl} />;
+    return (
+      <SecureMediaFrame>
+        <AudioPlayer src={objectUrl} secure />
+      </SecureMediaFrame>
+    );
   }
 
   return (
