@@ -3,12 +3,13 @@
 import { useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { Paperclip, Send, X } from 'lucide-react';
+import { Camera, Paperclip, Send, X } from 'lucide-react';
 import { Theme } from 'emoji-picker-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { VoiceRecorder } from '@/components/media/VoiceRecorder';
+import { SnapchatCamera } from '@/components/media/SnapchatCamera';
 import { cn } from '@/lib/utils/cn';
 import { MAX_FILE_SIZE_BYTES } from '@/lib/utils/constants';
 import type { Message } from '@/lib/types/message.types';
@@ -38,6 +39,7 @@ export function MessageInput({
   const { push } = useToast();
   const [text, setText] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const canSend = useMemo(() => text.trim().length > 0 && !disabled, [text, disabled]);
@@ -52,6 +54,24 @@ export function MessageInput({
 
   return (
     <div className="border-t border-white/10 bg-background-secondary/40 px-3 py-3 backdrop-blur">
+      <SnapchatCamera
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        disabled={disabled || !onUploadFile}
+        onError={(msg) => push(msg, 'error')}
+        onCapture={async (file) => {
+          if (!onUploadFile) return;
+          if (file.size > MAX_FILE_SIZE_BYTES) {
+            push('File is too large.', 'error');
+            return;
+          }
+          try {
+            await onUploadFile(file);
+          } catch (err) {
+            push(err instanceof Error ? err.message : 'Upload failed', 'error');
+          }
+        }}
+      />
       {replyingTo ? (
         <div className="relative mx-auto mb-2 flex max-w-4xl items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary">
           <div className="min-w-0">
@@ -101,6 +121,17 @@ export function MessageInput({
           aria-label="Attach file"
         >
           <Paperclip className="h-4 w-4" />
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          className="px-3 lg:hidden"
+          disabled={disabled || !onUploadFile}
+          onClick={() => setCameraOpen(true)}
+          aria-label="Open camera"
+        >
+          <Camera className="h-5 w-5" />
         </Button>
 
         <Button
@@ -165,7 +196,10 @@ export function MessageInput({
         </Button>
       </div>
       <div className={cn('mx-auto mt-2 max-w-4xl text-[11px] text-text-muted')}>
-        Swipe right on a message to reply · Shift+Enter for newline
+        <span className="lg:hidden">Swipe to reply · Camera: tap photo, hold video</span>
+        <span className="hidden lg:inline">
+          Swipe right on a message to reply · Shift+Enter for newline
+        </span>
       </div>
     </div>
   );
