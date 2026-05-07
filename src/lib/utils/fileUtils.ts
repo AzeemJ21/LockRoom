@@ -54,7 +54,8 @@ const EXT_TO_MIME: Record<string, string> = {
 
 export function resolveMimeForFile(file: File): string {
   const t = file.type?.trim();
-  if (t) return normalizeMime(t);
+  /** MediaRecorder / browsers often send `video/webm;codecs=vp9,opus` — allow-list is primary type only. */
+  if (t) return normalizeMime(t.split(';')[0]?.trim() ?? t);
   const lower = file.name.toLowerCase();
   const dot = lower.lastIndexOf('.');
   const ext = dot >= 0 ? lower.slice(dot + 1) : '';
@@ -79,7 +80,8 @@ export function sniffMimeFromMagic(head: ArrayBuffer): string | null {
 
 export function isAllowedMime(mime: string): boolean {
   if (!mime) return false;
-  return ALLOWED.has(mime);
+  const primary = normalizeMime(mime.split(';')[0]?.trim() ?? mime);
+  return ALLOWED.has(primary);
 }
 
 export function formatBytes(n: number): string {

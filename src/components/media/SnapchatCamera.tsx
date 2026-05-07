@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -67,6 +68,11 @@ export function SnapchatCamera({
   const [recording, setRecording] = useState(false);
   const [hasVideoDevice, setHasVideoDevice] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -184,11 +190,12 @@ export function SnapchatCamera({
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const primaryMime = mimeType.split(';')[0]?.trim() ?? 'video/webm';
+        const blob = new Blob(chunksRef.current, { type: primaryMime });
         chunksRef.current = [];
         const ext = extensionForVideoMime(mimeType);
         const file = new File([blob], `clip-${Date.now()}.${ext}`, {
-          type: blob.type || mimeType,
+          type: primaryMime,
         });
         void (async () => {
           try {
@@ -292,15 +299,19 @@ export function SnapchatCamera({
   const progress = Math.min(elapsedMs / MAX_CAMERA_VIDEO_MS, 1);
   const maxClock = formatRecordingClock(MAX_CAMERA_VIDEO_MS);
 
-  return (
+  /** Portal to `document.body` so `position:fixed` is not clipped by ancestor `backdrop-filter` / transforms (e.g. chat input bar). */
+  if (!mounted || typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
-      {open ? (
+      {open && (
         <motion.div
+          key="snapchat-camera"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[220] flex min-h-[100dvh] min-w-0 flex-col bg-black overscroll-none"
+          className="fixed inset-0 z-[300] flex min-h-[100dvh] min-w-0 flex-col bg-black overscroll-none"
           style={{
             touchAction: 'none',
             paddingBottom: 'env(safe-area-inset-bottom)',
@@ -418,7 +429,8 @@ export function SnapchatCamera({
             </button>
           </div>
         </motion.div>
-      ) : null}
-    </AnimatePresence>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 }
